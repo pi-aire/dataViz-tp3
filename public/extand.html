@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>TP3 DATA-VIZ</title>
+    <meta charset="UTF-8" />
+    <style>
+        .hidden {
+            display: none;
+        }
+
+        div.tooltip {
+            color: #222;
+            background-color: #fff;
+            padding: .5em;
+            text-shadow: #f5f5f5 0 1px 0;
+            border-radius: 2px;
+            opacity: 0.9;
+            position: absolute;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Taux d'hospitalisation en fonction du jour</h1>
+
+    <div>
+        <input id="slider" type="range" value="17" min="17" max="60" step="1" />
+        <span id="day">day</span>
+    </div>
+
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script>
+        const day = "20/04/2020";
+        let width = 700,
+            height = 580;
+
+        let svg = d3
+            .select("body") // creation du svg
+            .append("svg") // dans le dom
+            .attr("width", width)
+            .attr("height", height);
+
+        let tooltip = d3.select('body').append('div')
+            .attr('class', 'hidden tooltip')
+
+        let projection = d3
+            .geoConicConformal() // definition de
+            .center([2.454071, 46.279229])
+            .scale(2800);
+
+        let path = d3.geoPath() // mapping des donnees
+            .projection(projection); // spatiales a la proj.
+
+        let color = d3.scaleQuantize()
+            .range(['#fff5f0','#fee0d2','#fcbba1','#fc9272','#fb6a4a','#ef3b2c','#cb181d','#a50f15','#67000d']);
+            // .range(["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"]);
+
+        d3.csv("covid-france-mars-avril.csv").then(data => {
+            color.domain([0, 2000])
+            // Gestion du slider
+            d3.select("#slider")
+                .on("input", event => {
+                    let value = event.target.valueAsNumber
+                    let day = 1 + (value % 31)
+                    let month = 2 + Math.ceil(value / 30.5)
+                    console.log(Math.ceil(value/31))
+                    let date = ((day < 10) ? ("0" + day) : (""+day)) + "/" + ((month < 10) ? ("0" + month) :(""+ month)) + "/2020"
+                    d3.select("#day").text(date);
+                });
+
+
+            d3.json("departements-version-simplifiee.geojson").then(json => {
+                //On fusionne les donnees avec le GeoJSON des regions
+                for (let i = 0; i < data.length; i++) {
+                    if (data[i].jour != day) {
+                        continue;
+                    }
+                    //Nom de l'etat
+                    let dataState = data[i]["Département"];
+                    //Valeur associee a l'etat
+                    let dataValue = parseFloat(data[i].hosp);
+
+                    //Recherche de l'etat dans le GeoJSON
+                    for (let j = 0; j < json.features.length; j++) {
+                        let jsonState = json.features[j].properties.nom;
+                        if (dataState == jsonState) {
+                            //On injecte la valeur de l'Etat dans le json
+                            json.features[j].properties.value = dataValue;
+                            //Pas besoin de chercher plus loin
+                            break;
+                        }
+                    }
+
+                }
+
+                // svg.selectAll("path").data(json.features).enter().append("path").attr("fill", "#ccc").attr("d", path);
+                svg.selectAll("path")
+                    .data(json.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", path)
+                    .style("fill", d => {
+                        let value = d.properties.value;
+                        if (value) {
+                            return color(value);
+                        } else {
+                            // si pas de valeur alors en gris
+                            return "#ccc";
+                        }
+                    })
+                    .on('mousemove', (mouse, d) => {
+                        // on affiche le toolip
+                        tooltip.classed('hidden', false)
+                            // on positionne le tooltip en fonction 
+                            // de la position de la souris
+                            .attr('style', 'left:' + (mouse.x + 15) +
+                                'px; top:' + (mouse.y - 35) + 'px')
+                            // on recupere le nom de l'etat 
+                            .html(d.properties.nom);
+                    })
+                    .on('mouseout', function () {
+                        // on cache le toolip
+                        tooltip.classed('hidden', true);
+                    });
+            });
+
+        });
+
+    </script>
+</body>
+
+</html>
