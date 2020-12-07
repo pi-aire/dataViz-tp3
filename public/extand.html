@@ -4,6 +4,7 @@
 <head>
     <title>TP3 DATA-VIZ</title>
     <meta charset="UTF-8" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
     <style>
         .hidden {
             display: none;
@@ -23,13 +24,24 @@
 
 <body>
 
-    <h1>Taux d'hospitalisation en fonction du jour</h1>
-
-    <div>
-        <input id="slider" type="range" value="17" min="17" max="60" step="1" />
-        <span id="day">day</span>
+    <nav class="navbar navbar-dark bg-dark">
+        <span class="navbar-brand mb-0 h1">TP3 Data Visualisation BONUS</span>
+    </nav>
+    </br>
+    <div class="card mx-auto" style="width: 600px;">
+        <div class="card-header h4">
+            Taux d'hospitalisation le  <span id="day" class="badge badge-info"></span>
+            <div>
+                <input id="slider" type="range"  min="17" max="60" value="17" step="1" />
+            </div>
+        </div>
+        <div class="card-body" style="position: relative;left: -35%;">
+        </div>
     </div>
 
+    
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
     <script src="https://d3js.org/d3.v6.min.js"></script>
     <script>
         const day = "20/04/2020";
@@ -37,7 +49,7 @@
             height = 580;
 
         let svg = d3
-            .select("body") // creation du svg
+            .select(".card-body") // creation du svg
             .append("svg") // dans le dom
             .attr("width", width)
             .attr("height", height);
@@ -54,79 +66,105 @@
             .projection(projection); // spatiales a la proj.
 
         let color = d3.scaleQuantize()
-            .range(['#fff5f0','#fee0d2','#fcbba1','#fc9272','#fb6a4a','#ef3b2c','#cb181d','#a50f15','#67000d']);
-            // .range(["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"]);
+            .range(['#fff5f0', '#fee0d2', '#fcbba1', '#fc9272', '#fb6a4a', '#ef3b2c', '#cb181d', '#a50f15', '#67000d']);
 
-        d3.csv("covid-france-mars-avril.csv").then(data => {
+        let min = Infinity; // min value dans la carte
+        let max = 0; // max value de la carte
+        // permet de mieux répartire les couleurs en fonction des valeurs fournie par la base
+        function colorGradient(value){
+            if (value > max){
+                max = value
+            }
+            if (value < min){
+                min = value
+            }
+            // color.domain([min, max])
+        }
+
+        //On charge la base de donnée
+        d3.csv("https://lyondataviz.github.io/teaching/lyon1-m2/2020/data/covid-france-mars-avril.csv").then(data=>{
             color.domain([0, 2000])
-            // Gestion du slider
-            d3.select("#slider")
-                .on("input", event => {
-                    let value = event.target.valueAsNumber
-                    let day = 1 + (value % 31)
-                    let month = 2 + Math.ceil(value / 30.5)
-                    console.log(Math.ceil(value/31))
-                    let date = ((day < 10) ? ("0" + day) : (""+day)) + "/" + ((month < 10) ? ("0" + month) :(""+ month)) + "/2020"
-                    d3.select("#day").text(date);
-                });
+            // On charge la carte à afficher
+            d3.json("https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson").then(json => {
+                // Gestion du slider
+                d3.select("#slider")
+                    .on("input", event => {
+                        let value = event.target.valueAsNumber
+                        let day = 1 + (value % 31)
+                        let month = 2 + Math.ceil(value / 30.5)
+                        let date = ((day < 10) ? ("0" + day) : ("" + day)) + "/" + ((month < 10) ? ("0" + month) : ("" + month)) + "/2020"
+                        d3.select("#day").text(date);
+                        refreshValue(data, json, date)
+                    });
+                d3.select("#day").text("18/03/2020");
+                refreshValue(data, json)
+            });
+        });
+        
+        // Réactualisation de la vu
+        function refreshValue(data, json, day="18/03/2020"){
+            //On fusionne les donnees avec le GeoJSON des regions
+            for (let i = 0; i < data.length; i++) {
+                if (data[i].jour != day) {
+                    continue;
+                }
+                //Nom de l'etat
+                let dataState = data[i]["Département"];
+                //Valeur associee a l'etat
+                let dataValue = parseFloat(data[i].hosp);
 
-
-            d3.json("departements-version-simplifiee.geojson").then(json => {
-                //On fusionne les donnees avec le GeoJSON des regions
-                for (let i = 0; i < data.length; i++) {
-                    if (data[i].jour != day) {
-                        continue;
+                //Recherche de l'etat dans le GeoJSON
+                for (let j = 0; j < json.features.length; j++) {
+                    let jsonState = json.features[j].properties.nom;
+                    if (dataState == jsonState) {
+                        //On injecte la valeur de l'Etat dans le json
+                        json.features[j].properties.value = dataValue;
+                        //Pas besoin de chercher plus loin
+                        break;
                     }
-                    //Nom de l'etat
-                    let dataState = data[i]["Département"];
-                    //Valeur associee a l'etat
-                    let dataValue = parseFloat(data[i].hosp);
-
-                    //Recherche de l'etat dans le GeoJSON
-                    for (let j = 0; j < json.features.length; j++) {
-                        let jsonState = json.features[j].properties.nom;
-                        if (dataState == jsonState) {
-                            //On injecte la valeur de l'Etat dans le json
-                            json.features[j].properties.value = dataValue;
-                            //Pas besoin de chercher plus loin
-                            break;
-                        }
-                    }
-
                 }
 
-                // svg.selectAll("path").data(json.features).enter().append("path").attr("fill", "#ccc").attr("d", path);
-                svg.selectAll("path")
-                    .data(json.features)
-                    .enter()
-                    .append("path")
-                    .attr("d", path)
-                    .style("fill", d => {
-                        let value = d.properties.value;
-                        if (value) {
-                            return color(value);
-                        } else {
-                            // si pas de valeur alors en gris
-                            return "#ccc";
-                        }
-                    })
-                    .on('mousemove', (mouse, d) => {
-                        // on affiche le toolip
-                        tooltip.classed('hidden', false)
-                            // on positionne le tooltip en fonction 
-                            // de la position de la souris
-                            .attr('style', 'left:' + (mouse.x + 15) +
-                                'px; top:' + (mouse.y - 35) + 'px')
-                            // on recupere le nom de l'etat 
-                            .html(d.properties.nom);
-                    })
-                    .on('mouseout', function () {
-                        // on cache le toolip
-                        tooltip.classed('hidden', true);
-                    });
-            });
+            }
+            drawMap(json)
 
-        });
+        }
+
+        // Dessin la carte
+        function drawMap(json) {
+            carte = svg.selectAll("path")
+                .data(json.features);
+
+            // code pour la creation de la carte quand les donnees sont chargees la 1e fois.
+            carte.enter()
+                .append("path")
+                .merge(carte)
+                .attr("class", "enter")
+                .attr("d", path)
+                .style("fill", d => {
+                    let value = d.properties.value;
+                    if (value) {
+                        colorGradient(value); // On update le gradient
+                        return color(value);
+                    } else {
+                        // si pas de valeur alors en gris
+                        return "#ccc";
+                    }
+                })
+                .on('mousemove', (mouse, d) => {
+                    // on affiche le toolip
+                    tooltip.classed('hidden', false)
+                        // on positionne le tooltip en fonction 
+                        // de la position de la souris
+                        .attr('style', 'left:' + (mouse.x + 15) +
+                            'px; top:' + (mouse.y - 35) + 'px')
+                        // on recupere le nom de l'etat 
+                        .html(d.properties.nom);
+                })
+                .on('mouseout', function () {
+                    // on cache le toolip
+                    tooltip.classed('hidden', true);
+                });
+        }
 
     </script>
 </body>
